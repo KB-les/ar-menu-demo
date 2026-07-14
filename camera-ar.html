@@ -266,7 +266,7 @@
         
         // Update UI
         DOM.desc.innerText = "Ready to serve.";
-        DOM.progress.parentElement.style.display = 'none';
+        DOM.progressBar.parentElement.style.display = 'none';
         DOM.startBtn.style.display = 'block';
         DOM.startBtn.disabled = false;
       },
@@ -279,7 +279,7 @@
       (error) => {
         console.error('Model load failed:', error);
         DOM.desc.innerHTML = '<span style="color:#ef4444;">Failed to load 3D model.</span><br>Please refresh and try again.';
-        DOM.progress.parentElement.style.display = 'none';
+        DOM.progressBar.parentElement.style.display = 'none';
       }
     );
 
