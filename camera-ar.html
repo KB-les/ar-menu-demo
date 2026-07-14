@@ -3,122 +3,89 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>AR Menu — Unified Experience</title>
+  <title>AR Menu — Live Preview</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Inter', sans-serif;
-      background: #000;
-      color: #fff;
-      overflow: hidden;
-      /* Only disable touch actions on the touch surface, let the body scroll if needed on error screens */
-    }
-    
-    /* 1. Camera Feed (Tier 2 & 3) */
+    body { font-family: 'Inter', sans-serif; background: #000; color: #fff; overflow: hidden; }
+
     #camera-feed {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      object-fit: cover;
-      z-index: 0;
-      display: none;
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none;
     }
-
-    /* 2. Three.js Canvas */
     #overlay-canvas {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 10;
-      outline: none;
-      pointer-events: none;
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; z-index: 10; pointer-events: none;
     }
-
-    /* 3. Interaction Touch Surface (Separate from UI) */
     #touch-surface {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 50;
-      touch-action: none;
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; z-index: 50; touch-action: none;
     }
-
-    /* 4. UI Layer */
     #ui-layer {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      z-index: 100;
-      pointer-events: none; /* Let touches pass through to #touch-surface */
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%; z-index: 100;
+      pointer-events: none; display: flex; flex-direction: column; justify-content: space-between;
     }
 
     .top-bar {
-      display: flex;
-      justify-content: space-between;
+      display: flex; justify-content: space-between;
       padding: max(16px, env(safe-area-inset-top)) 20px 16px;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
+      background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
       pointer-events: auto;
     }
-    .back-btn {
-      color: #fff; text-decoration: none; font-weight: 500; display: flex; align-items: center; gap: 6px;
-    }
-    
-    /* Mode badge hidden by default, useful for debugging */
-    #mode-badge-container {
-      display: none; 
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; align-items: center; gap: 6px;
-    }
-    #mode-badge-container .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; }
+    .back-btn { color: #fff; text-decoration: none; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .live-badge { background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .live-dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; animation: blink 1.5s ease infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
     .bottom-bar {
-      padding: 16px; padding-bottom: max(20px, env(safe-area-bottom));
-      background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
+      padding: 16px; padding-bottom: max(24px, env(safe-area-inset-bottom));
+      background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
       pointer-events: auto;
     }
-    .dish-info { display: flex; justify-content: space-between; margin-bottom: 12px; }
-    .dish-name { font-size: 1.15rem; font-weight: 700; }
-    .dish-price { font-size: 1.15rem; font-weight: 800; color: #f59e0b; }
+    .dish-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .dish-name { font-size: 1.1rem; font-weight: 700; }
+    .dish-price { font-size: 1.1rem; font-weight: 800; color: #f59e0b; }
     .controls { display: flex; gap: 10px; margin-bottom: 8px; }
-    .btn { flex: 1; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); color: #fff; font-weight: 600; cursor: pointer; backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; gap: 6px;}
-    .btn:active { background: rgba(255,255,255,0.2); }
-    .hint { text-align: center; font-size: 0.75rem; color: rgba(255,255,255,0.5); }
+    .ctrl-btn {
+      flex: 1; padding: 11px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08);
+      color: #fff; font-weight: 600; cursor: pointer; backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 0.85rem;
+    }
+    .ctrl-btn:active { background: rgba(255,255,255,0.2); }
+    .hint { text-align: center; font-size: 0.75rem; color: rgba(255,255,255,0.45); }
 
-    /* Startup / Error / Loading Screens */
-    .overlay-screen {
+    /* Startup Screen */
+    #startup-screen {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(10,10,10,0.95); z-index: 500;
+      background: rgba(8,8,8,0.97); z-index: 500;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      padding: 40px; text-align: center; backdrop-filter: blur(10px);
-      transition: opacity 0.3s;
+      padding: 40px; text-align: center;
+      transition: opacity 0.4s;
     }
-    .overlay-screen.hidden { opacity: 0; pointer-events: none; display: none; }
-    
-    .start-btn {
-      background: #f59e0b; color: #000; border: none; padding: 16px 32px; border-radius: 12px; font-size: 1.1rem; font-weight: 700; cursor: pointer; margin-top: 24px;
+    #startup-screen.hidden { opacity: 0; pointer-events: none; }
+    #startup-screen h2 { font-size: 1.4rem; margin-bottom: 8px; }
+    .screen-desc { color: rgba(255,255,255,0.65); line-height: 1.5; font-size: 0.9rem; margin-top: 8px; }
+    .progress-wrap { width: 180px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 24px; overflow: hidden; }
+    #progress-bar { height: 100%; width: 0%; background: #f59e0b; transition: width 0.15s; border-radius: 4px; }
+    #start-btn {
+      display: none; margin-top: 24px;
+      background: #f59e0b; color: #000; border: none;
+      padding: 15px 32px; border-radius: 12px; font-size: 1rem; font-weight: 700; cursor: pointer;
     }
-    .start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .screen-desc { color: rgba(255,255,255,0.7); margin-top: 12px; line-height: 1.5; font-size: 0.9rem;}
-
-    .progress-bar-container {
-      width: 100%; max-width: 200px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 20px; overflow: hidden;
-    }
-    #progress-bar { width: 0%; height: 100%; background: #f59e0b; transition: width 0.1s; }
+    #start-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #error-msg { color: #ef4444; margin-top: 16px; font-size: 0.9rem; display: none; }
   </style>
 </head>
 <body>
 
-  <!-- Fullscreen Initial Loading Screen -->
-  <div id="startup-screen" class="overlay-screen">
-    <h2>AR Menu Preview</h2>
-    <p class="screen-desc">Loading high-quality 3D model...</p>
-    <div class="progress-bar-container">
-      <div id="progress-bar"></div>
-    </div>
-    <button class="start-btn" id="start-btn" disabled style="display:none;">Start AR</button>
+  <div id="startup-screen">
+    <h2>🍔 AR Menu Preview</h2>
+    <p class="screen-desc" id="screen-desc">Loading 3D model...</p>
+    <div class="progress-wrap"><div id="progress-bar"></div></div>
+    <button id="start-btn">Start AR</button>
+    <p id="error-msg"></p>
   </div>
 
   <video id="camera-feed" autoplay playsinline muted></video>
@@ -127,369 +94,247 @@
 
   <div id="ui-layer">
     <div class="top-bar">
-      <a href="index.html" class="back-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg> Menu</a>
-      <div id="mode-badge-container"><div class="dot"></div> <span id="mode-badge">AR MODE</span></div>
+      <a href="index.html" class="back-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+        Menu
+      </a>
+      <div class="live-badge"><div class="live-dot"></div>CAMERA</div>
     </div>
-
     <div class="bottom-bar">
       <div class="dish-info">
         <span class="dish-name">Signature Burger</span>
         <span class="dish-price">R85</span>
       </div>
       <div class="controls">
-        <button class="btn" id="btn-reset"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Reset Position</button>
+        <button class="ctrl-btn" id="btn-reset">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Reset
+        </button>
+        <button class="ctrl-btn" id="btn-bigger">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          Bigger
+        </button>
+        <button class="ctrl-btn" id="btn-smaller">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          Smaller
+        </button>
       </div>
-      <div class="hint" id="interaction-hint">Point at a surface and tap to place</div>
+      <div class="hint" id="hint-text">Point camera at surface · Tap to place</div>
     </div>
   </div>
 
   <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-    }
-  }
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
   </script>
 
   <script type="module">
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    /* =========================================================================
-       1. CORE STATE & DOM
-       ========================================================================= */
-    const DOM = {
-      startBtn: document.getElementById('start-btn'),
-      startupScreen: document.getElementById('startup-screen'),
-      video: document.getElementById('camera-feed'),
-      canvas: document.getElementById('overlay-canvas'),
-      touchSurface: document.getElementById('touch-surface'),
-      hintText: document.getElementById('interaction-hint'),
-      modeBadge: document.getElementById('mode-badge'),
-      resetBtn: document.getElementById('btn-reset'),
-      progressBar: document.getElementById('progress-bar'),
-      desc: document.querySelector('.screen-desc')
+    // ── DOM refs ──
+    const $id = id => document.getElementById(id);
+    const dom = {
+      startup:    $id('startup-screen'),
+      desc:       $id('screen-desc'),
+      progress:   $id('progress-bar'),
+      startBtn:   $id('start-btn'),
+      errorMsg:   $id('error-msg'),
+      video:      $id('camera-feed'),
+      canvas:     $id('overlay-canvas'),
+      touch:      $id('touch-surface'),
+      hint:       $id('hint-text'),
+      resetBtn:   $id('btn-reset'),
+      biggerBtn:  $id('btn-bigger'),
+      smallerBtn: $id('btn-smaller'),
     };
 
-    const AppState = {
-      tier: 0, // 1: Immersive-AR, 2: Inline XR, 3: Gyro Fallback
-      model: null,
-      modelBaseScale: 1,
-      modelCurrentScale: 1,
-      modelPlaced: false,
-      videoStream: null,
-      virtualFloorY: -1.5,
-      cameraFov: 70
-    };
+    // ── State ──
+    let model = null;
+    let modelBaseScale = 1;
+    let modelScale = 1;
+    let modelPlaced = false;
+    let modelPos = new THREE.Vector3(0, 0, -3); // world position when placed
+    let modelRotY = 0;
+    const VIRTUAL_FLOOR_Y = -1.2;
 
-    // Helper: Haptics
-    function vibrate(duration = 50) {
-      if (navigator.vibrate) navigator.vibrate(duration);
-    }
-
-    /* =========================================================================
-       2. THREE.JS RENDERER LAYER (Shared setup)
-       ========================================================================= */
-    const renderer = new THREE.WebGLRenderer({ canvas: DOM.canvas, alpha: true, antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    // ── Renderer ──
+    const renderer = new THREE.WebGLRenderer({ canvas: dom.canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
 
+    // ── Scene ──
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(AppState.cameraFov, window.innerWidth / window.innerHeight, 0.01, 20);
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30);
 
-    // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(2, 5, 3);
-    scene.add(dirLight);
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.3);
+    sun.position.set(2, 5, 3);
+    scene.add(sun);
 
-    // Reticle (Ring)
-    const ringGeo = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
-    const reticle = new THREE.Mesh(ringGeo, ringMat);
-    reticle.matrixAutoUpdate = false;
-    reticle.visible = false;
-    scene.add(reticle);
+    // Reticle — use matrixAutoUpdate=true, set position directly
+    const reticleGeo = new THREE.RingGeometry(0.12, 0.17, 32);
+    reticleGeo.rotateX(-Math.PI / 2);
+    const reticleMesh = new THREE.Mesh(
+      reticleGeo,
+      new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.75, transparent: true, side: THREE.DoubleSide })
+    );
+    reticleMesh.visible = false;
+    scene.add(reticleMesh);
 
-    // Model Container
+    // Model group
     const modelGroup = new THREE.Group();
     modelGroup.visible = false;
     scene.add(modelGroup);
 
-    // Fake Ground Shadow (Ambient Occlusion)
-    const shadowGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-    const shadowCanvas = document.createElement('canvas');
-    shadowCanvas.width = 128; shadowCanvas.height = 128;
-    const ctx = shadowCanvas.getContext('2d');
-    const grad = ctx.createRadialGradient(64,64,0, 64,64,64);
-    grad.addColorStop(0, 'rgba(0,0,0,0.6)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0,0,128,128);
-    const shadowTex = new THREE.CanvasTexture(shadowCanvas);
-    const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.8, depthWrite: false });
-    const groundShadow = new THREE.Mesh(shadowGeo, shadowMat);
-    groundShadow.position.y = 0.01; // Just above the floor
-    modelGroup.add(groundShadow);
+    // Shadow disc beneath model
+    const shadowDisc = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const cx = c.getContext('2d');
+      const g = cx.createRadialGradient(64,64,0,64,64,64);
+      g.addColorStop(0,'rgba(0,0,0,0.55)'); g.addColorStop(1,'rgba(0,0,0,0)');
+      cx.fillStyle = g; cx.fillRect(0,0,128,128);
+      const mesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false })
+      );
+      mesh.position.y = 0.005;
+      return mesh;
+    })();
+    modelGroup.add(shadowDisc);
 
-
-    /* =========================================================================
-       3. PRELOADING (Immediate execution)
-       ========================================================================= */
-    const params = new URLSearchParams(window.location.search);
-    let modelFile = 'tasty_burger_with_fries.glb'; // Default
-    if (params.get('dish') === 'pizza') {
-      modelFile = 'pizza.glb'; // Example fallback
-    }
-
-    const loader = new GLTFLoader();
-    loader.load(
-      modelFile,
-      (gltf) => {
-        AppState.model = gltf.scene;
-        
-        // Normalize size to ~30cm
-        const box = new THREE.Box3().setFromObject(AppState.model);
+    // ── Preload model immediately ──
+    new GLTFLoader().load(
+      'tasty_burger_with_fries.glb',
+      gltf => {
+        model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
-        
-        AppState.modelBaseScale = 0.3 / Math.max(size.x, size.z);
-        AppState.model.scale.setScalar(AppState.modelBaseScale);
-        
-        // Center bottom at origin
-        AppState.model.position.sub(center).multiplyScalar(AppState.modelBaseScale);
-        AppState.model.position.y = -box.min.y * AppState.modelBaseScale;
-        
-        modelGroup.add(AppState.model);
-        
-        // Update UI
-        DOM.desc.innerText = "Ready to serve.";
-        DOM.progressBar.parentElement.style.display = 'none';
-        DOM.startBtn.style.display = 'block';
-        DOM.startBtn.disabled = false;
+        modelBaseScale = 0.32 / Math.max(size.x, size.y, size.z);
+        model.scale.setScalar(modelBaseScale);
+        model.position.set(
+          -center.x * modelBaseScale,
+          -box.min.y * modelBaseScale,
+          -center.z * modelBaseScale
+        );
+        modelGroup.add(model);
+
+        // Show start button
+        dom.desc.innerText = 'Ready!';
+        dom.progress.parentElement.style.display = 'none';
+        dom.startBtn.style.display = 'block';
+        dom.startBtn.disabled = false;
       },
-      (xhr) => {
-        if (xhr.lengthComputable) {
-          const percent = (xhr.loaded / xhr.total) * 100;
-          DOM.progressBar.style.width = percent + '%';
-        }
+      xhr => {
+        if (xhr.lengthComputable)
+          dom.progress.style.width = ((xhr.loaded / xhr.total) * 100) + '%';
       },
-      (error) => {
-        console.error('Model load failed:', error);
-        DOM.desc.innerHTML = '<span style="color:#ef4444;">Failed to load 3D model.</span><br>Please refresh and try again.';
-        DOM.progressBar.parentElement.style.display = 'none';
+      err => {
+        console.error(err);
+        dom.desc.innerText = 'Failed to load model.';
+        dom.progress.parentElement.style.display = 'none';
+        dom.errorMsg.innerText = 'Please check your internet connection and refresh.';
+        dom.errorMsg.style.display = 'block';
       }
     );
 
+    // ── Gyro state ──
+    const gyro = { a: 0, b: 0, g: 0, driftOff: 0, lastA: 0, stillAt: null };
+    const zee = new THREE.Vector3(0, 0, 1);
+    const q0 = new THREE.Quaternion();
+    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
+    let gyroRunning = false;
 
-    /* =========================================================================
-       4. INTERACTION LAYER (Abstracts touch events to commands)
-       ========================================================================= */
-    class InteractionLayer {
-      constructor(element) {
-        this.element = element;
-        this.touchState = { count: 0, dist: 0, lastX: 0 };
-        this.listeners = {};
-        
-        this.element.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
-        this.element.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
-      }
-      
-      on(event, callback) { this.listeners[event] = callback; }
-      emit(event, data) { if (this.listeners[event]) this.listeners[event](data); }
-      
-      onTouchStart(e) {
-        e.preventDefault(); // Prevent accidental scroll/zoom
-        this.touchState.count = e.touches.length;
-        
-        if (!AppState.modelPlaced) {
-          this.emit('place');
-          return;
-        }
-        
-        if (this.touchState.count === 1) {
-          this.touchState.lastX = e.touches[0].clientX;
-        } else if (this.touchState.count === 2) {
-          const dx = e.touches[0].clientX - e.touches[1].clientX;
-          const dy = e.touches[0].clientY - e.touches[1].clientY;
-          this.touchState.dist = Math.sqrt(dx*dx + dy*dy);
-        }
-      }
-      
-      onTouchMove(e) {
-        e.preventDefault();
-        if (!AppState.modelPlaced) return;
-        
-        if (e.touches.length === 1 && this.touchState.count === 1) {
-          const dx = e.touches[0].clientX - this.touchState.lastX;
-          this.emit('rotate', dx * 0.01);
-          this.touchState.lastX = e.touches[0].clientX;
-        } else if (e.touches.length === 2 && this.touchState.count === 2) {
-          const dx = e.touches[0].clientX - e.touches[1].clientX;
-          const dy = e.touches[0].clientY - e.touches[1].clientY;
-          const dist = Math.sqrt(dx*dx + dy*dy);
-          const scaleDelta = dist / this.touchState.dist;
-          this.emit('scale', scaleDelta);
-          this.touchState.dist = dist;
-        }
-      }
+    function onOrientation(e) {
+      const raw = e.alpha || 0;
+      if (Math.abs(raw - gyro.lastA) < 0.05) {
+        if (!gyro.stillAt) gyro.stillAt = Date.now();
+        else if (Date.now() - gyro.stillAt > 3000) gyro.driftOff = raw;
+      } else { gyro.stillAt = null; }
+      gyro.lastA = raw;
+      gyro.a = THREE.MathUtils.degToRad(raw - gyro.driftOff);
+      gyro.b = THREE.MathUtils.degToRad(e.beta  || 0);
+      gyro.g = THREE.MathUtils.degToRad(e.gamma || 0);
     }
 
-    const interaction = new InteractionLayer(DOM.touchSurface);
+    async function enableGyro() {
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const p = await DeviceOrientationEvent.requestPermission().catch(() => 'denied');
+        if (p !== 'granted') return false;
+      }
+      window.addEventListener('deviceorientation', onOrientation);
+      gyroRunning = true;
+      return true;
+    }
 
-    interaction.on('place', () => {
-      if (!reticle.visible) return;
-      vibrate();
-      modelGroup.position.setFromMatrixPosition(reticle.matrix);
-      // Keep model flat on floor (only copy Y rotation)
-      const euler = new THREE.Euler().setFromRotationMatrix(reticle.matrix);
-      modelGroup.rotation.y = euler.y;
-      
-      modelGroup.visible = true;
-      reticle.visible = false;
-      AppState.modelPlaced = true;
-      DOM.hintText.innerText = "1-finger rotate · 2-finger pinch zoom";
-    });
+    function getCameraDir() {
+      // Direction camera is pointing
+      return new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+    }
 
-    interaction.on('rotate', (deltaRotationY) => {
-      modelGroup.rotation.y += deltaRotationY;
-    });
+    function floorIntersect() {
+      // Raycast from camera to virtual floor (y = VIRTUAL_FLOOR_Y)
+      const dir = getCameraDir();
+      if (dir.y >= -0.05) return null; // Not looking down
+      const t = (VIRTUAL_FLOOR_Y - camera.position.y) / dir.y;
+      return camera.position.clone().addScaledVector(dir, t);
+    }
 
-    interaction.on('scale', (scaleDelta) => {
-      AppState.modelCurrentScale *= scaleDelta;
-      AppState.modelCurrentScale = Math.max(0.2, Math.min(AppState.modelCurrentScale, 3));
-      AppState.model.scale.setScalar(AppState.modelBaseScale * AppState.modelCurrentScale);
-      groundShadow.scale.setScalar(AppState.modelCurrentScale);
-    });
+    function applyGyroToCamera() {
+      const e = new THREE.Euler(gyro.b, gyro.a, -gyro.g, 'YXZ');
+      camera.quaternion.setFromEuler(e);
+      camera.quaternion.multiply(q1);
+      const screenAngle = (screen.orientation?.angle ?? window.orientation ?? 0);
+      camera.quaternion.multiply(q0.setFromAxisAngle(zee, -THREE.MathUtils.degToRad(screenAngle)));
+    }
 
-    DOM.resetBtn.addEventListener('click', () => {
-      AppState.modelPlaced = false;
-      modelGroup.visible = false;
-      reticle.visible = true;
-      DOM.hintText.innerText = "Point at a surface and tap to place";
-      AppState.modelCurrentScale = 1;
-      if (AppState.model) AppState.model.scale.setScalar(AppState.modelBaseScale);
-      groundShadow.scale.setScalar(1);
-    });
+    // ── Render loop (gyro mode) ──
+    function renderLoop() {
+      if (gyroRunning) applyGyroToCamera();
 
-
-    /* =========================================================================
-       5. DETECTION & ROUTING LAYER
-       ========================================================================= */
-    DOM.startBtn.addEventListener('click', async () => {
-      DOM.startupScreen.classList.add('hidden');
-
-      if (navigator.xr) {
-        // TIER 1: True AR
-        const immersiveSupported = await navigator.xr.isSessionSupported('immersive-ar');
-        if (immersiveSupported) {
-          startWebXR('immersive-ar');
-          return;
-        }
-        
-        // TIER 2: Inline XR (Better sensor fusion than raw gyro)
-        const inlineSupported = await navigator.xr.isSessionSupported('inline');
-        if (inlineSupported && 'XRDOMOverlayState' in window) {
-          startWebXR('inline');
-          return;
+      if (!modelPlaced) {
+        const hit = floorIntersect();
+        if (hit) {
+          reticleMesh.position.copy(hit);
+          reticleMesh.rotation.set(-Math.PI / 2, 0, 0);
+          reticleMesh.visible = true;
+        } else {
+          reticleMesh.visible = false;
         }
       }
 
-      // TIER 3: Raw Gyro Fallback
-      startGyroFallback();
-    });
+      renderer.render(scene, camera);
+    }
 
-    // Clean up camera stream on exit
-    window.addEventListener('beforeunload', () => {
-      if (AppState.videoStream) {
-        AppState.videoStream.getTracks().forEach(t => t.stop());
-      }
-      if (renderer.xr.getSession()) {
-        renderer.xr.getSession().end();
-      }
-    });
-
-
-    /* =========================================================================
-       6. TIER 1 & 2: WebXR Session Manager
-       ========================================================================= */
+    // ── WebXR hit-test ──
     let hitTestSource = null;
-    let hitTestSourceRequested = false;
-
-    async function startWebXR(sessionMode) {
-      AppState.tier = sessionMode === 'immersive-ar' ? 1 : 2;
-      DOM.modeBadge.innerText = AppState.tier === 1 ? 'REAL AR' : 'SCREEN AR';
-      
-      const sessionInit = {
-        requiredFeatures: AppState.tier === 1 ? ['hit-test', 'dom-overlay'] : ['dom-overlay'],
-        domOverlay: { root: document.getElementById('ui-layer') }
-      };
-
-      try {
-        const session = await navigator.xr.requestSession(sessionMode, sessionInit);
-        renderer.xr.setReferenceSpaceType(AppState.tier === 1 ? 'local' : 'viewer');
-        await renderer.xr.setSession(session);
-        
-        // Session Recovery: if WebXR drops, fall back to gyro seamlessly
-        session.addEventListener('end', () => {
-          renderer.xr.setSession(null);
-          startGyroFallback();
-        });
-        
-        if (AppState.tier === 2) {
-          // Inline XR requires the manual background video
-          await startCameraFeed();
-        }
-
-        renderer.setAnimationLoop(renderXR);
-      } catch (e) {
-        console.error("WebXR Session failed", e);
-        startGyroFallback();
-      }
-    }
+    let hitTestRequested = false;
 
     function renderXR(timestamp, frame) {
       if (!frame) return;
       const session = renderer.xr.getSession();
 
-      if (!AppState.modelPlaced) {
-        if (AppState.tier === 1) {
-          // TIER 1: Real Hit Testing
-          if (!hitTestSourceRequested) {
-            session.requestReferenceSpace('viewer').then((refSpace) => {
-              session.requestHitTestSource({ space: refSpace }).then((source) => { hitTestSource = source; });
-            });
-            hitTestSourceRequested = true;
-          }
-
-          if (hitTestSource) {
-            const refSpace = renderer.xr.getReferenceSpace();
-            const hitTestResults = frame.getHitTestResults(hitTestSource);
-            if (hitTestResults.length > 0) {
-              const hit = hitTestResults[0];
-              const pose = hit.getPose(refSpace);
-              reticle.visible = true;
-              reticle.matrix.fromArray(pose.transform.matrix);
-            } else {
-              reticle.visible = false;
-            }
-          }
-        } else {
-          // TIER 2 (Inline): Virtual Floor Raycast
-          const xrCamera = renderer.xr.getCamera(camera);
-          const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(xrCamera.quaternion).normalize();
-          
-          if (dir.y < -0.05) { // Looking downwards
-            const distance = (AppState.virtualFloorY - xrCamera.position.y) / dir.y;
-            const point = xrCamera.position.clone().add(dir.multiplyScalar(distance));
-            reticle.position.copy(point);
-            reticle.rotation.x = -Math.PI / 2;
-            reticle.updateMatrix();
-            reticle.visible = true;
+      if (!modelPlaced) {
+        if (!hitTestRequested) {
+          session.requestReferenceSpace('viewer').then(vs =>
+            session.requestHitTestSource({ space: vs }).then(s => { hitTestSource = s; })
+          );
+          hitTestRequested = true;
+        }
+        if (hitTestSource) {
+          const refSpace = renderer.xr.getReferenceSpace();
+          const results = frame.getHitTestResults(hitTestSource);
+          if (results.length > 0) {
+            const pose = results[0].getPose(refSpace);
+            const m = new THREE.Matrix4().fromArray(pose.transform.matrix);
+            reticleMesh.position.setFromMatrixPosition(m);
+            reticleMesh.rotation.set(-Math.PI / 2, 0, 0);
+            reticleMesh.visible = true;
           } else {
-            reticle.visible = false; // Looking up
+            reticleMesh.visible = false;
           }
         }
       }
@@ -497,112 +342,122 @@
       renderer.render(scene, camera);
     }
 
+    // ── Placement ──
+    function placeModel() {
+      if (!reticleMesh.visible) return;
+      modelGroup.position.copy(reticleMesh.position);
+      modelGroup.rotation.y = modelRotY;
+      modelGroup.visible = true;
+      reticleMesh.visible = false;
+      modelPlaced = true;
+      dom.hint.innerText = '1-finger drag to rotate · 2-finger pinch to scale';
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
 
-    /* =========================================================================
-       7. TIER 3: Raw Gyroscope Fallback (with Drift Compensation)
-       ========================================================================= */
-    let gyroState = {
-      alpha: 0, beta: 0, gamma: 0,
-      alphaDriftOffset: 0,
-      lastRawAlpha: 0,
-      stillStartTime: null
-    };
+    // ── Touch Interaction Layer ──
+    let ts = { count: 0, lastX: 0, dist: 0 };
+    dom.touch.addEventListener('touchstart', e => {
+      e.preventDefault();
+      ts.count = e.touches.length;
+      if (!modelPlaced) { placeModel(); return; }
+      if (ts.count === 1) ts.lastX = e.touches[0].clientX;
+      if (ts.count === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        ts.dist = Math.hypot(dx, dy);
+      }
+    }, { passive: false });
 
-    async function startGyroFallback() {
-      AppState.tier = 3;
-      DOM.modeBadge.innerText = 'GYRO AR';
-      renderer.xr.enabled = false;
-      
-      // Clear any XR transforms
-      camera.position.set(0, 0, 0);
-      camera.rotation.set(0, 0, 0);
-      
-      await startCameraFeed();
+    dom.touch.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (!modelPlaced) return;
+      if (e.touches.length === 1 && ts.count === 1) {
+        const dx = e.touches[0].clientX - ts.lastX;
+        modelRotY += dx * 0.012;
+        modelGroup.rotation.y = modelRotY;
+        ts.lastX = e.touches[0].clientX;
+      } else if (e.touches.length === 2 && ts.count === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const d = Math.hypot(dx, dy);
+        const delta = d / ts.dist;
+        modelScale = Math.max(0.3, Math.min(modelScale * delta, 4));
+        if (model) model.scale.setScalar(modelBaseScale * modelScale);
+        shadowDisc.scale.setScalar(modelScale);
+        ts.dist = d;
+      }
+    }, { passive: false });
 
-      // Request permission on iOS 13+
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    function resetPlacement() {
+      modelPlaced = false;
+      modelGroup.visible = false;
+      reticleMesh.visible = true;
+      dom.hint.innerText = 'Point camera at surface · Tap to place';
+      modelScale = 1;
+      if (model) model.scale.setScalar(modelBaseScale);
+      shadowDisc.scale.setScalar(1);
+    }
+
+    dom.resetBtn.addEventListener('click', resetPlacement);
+    dom.biggerBtn.addEventListener('click', () => {
+      if (!model) return;
+      modelScale = Math.min(modelScale * 1.25, 4);
+      model.scale.setScalar(modelBaseScale * modelScale);
+      shadowDisc.scale.setScalar(modelScale);
+    });
+    dom.smallerBtn.addEventListener('click', () => {
+      if (!model) return;
+      modelScale = Math.max(modelScale * 0.8, 0.3);
+      model.scale.setScalar(modelBaseScale * modelScale);
+      shadowDisc.scale.setScalar(modelScale);
+    });
+
+    // ── Startup routing ──
+    dom.startBtn.addEventListener('click', async () => {
+      dom.startup.classList.add('hidden');
+
+      // Try Tier 1: WebXR immersive-ar
+      if (navigator.xr) {
         try {
-          const perm = await DeviceOrientationEvent.requestPermission();
-          if (perm === 'granted') window.addEventListener('deviceorientation', handleOrientation);
-        } catch (e) { console.error(e); }
-      } else {
-        window.addEventListener('deviceorientation', handleOrientation);
+          const ok = await navigator.xr.isSessionSupported('immersive-ar');
+          if (ok) {
+            const session = await navigator.xr.requestSession('immersive-ar', {
+              requiredFeatures: ['hit-test', 'dom-overlay'],
+              domOverlay: { root: document.getElementById('ui-layer') }
+            });
+            renderer.xr.setReferenceSpaceType('local');
+            await renderer.xr.setSession(session);
+            session.addEventListener('end', () => {
+              renderer.xr.setSession(null);
+              startGyroMode(); // Graceful fallback
+            });
+            renderer.setAnimationLoop(renderXR);
+            return;
+          }
+        } catch (e) { console.warn('WebXR failed, falling back:', e); }
       }
 
-      renderer.setAnimationLoop(renderGyro);
-    }
+      // Tier 2/3: Gyro + Camera
+      startGyroMode();
+    });
 
-    async function startCameraFeed() {
-      DOM.video.style.display = 'block';
+    async function startGyroMode() {
+      dom.video.style.display = 'block';
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment', aspectRatio: { ideal: window.innerHeight / window.innerWidth } } 
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 } }
         });
-        AppState.videoStream = stream;
-        DOM.video.srcObject = stream;
+        dom.video.srcObject = stream;
+        window.addEventListener('beforeunload', () => stream.getTracks().forEach(t => t.stop()));
       } catch (e) {
-        console.warn("Camera permission denied.", e);
-        DOM.video.style.display = 'none'; // Will just show a black background
+        console.warn('No camera:', e);
+        dom.video.style.display = 'none';
       }
+      await enableGyro();
+      renderer.setAnimationLoop(renderLoop);
     }
 
-    function handleOrientation(e) {
-      const rawAlpha = e.alpha || 0;
-      
-      // Drift Compensation Logic
-      // If phone is perfectly still for 3 seconds, freeze the drift offset
-      if (Math.abs(rawAlpha - gyroState.lastRawAlpha) < 0.05) {
-        if (!gyroState.stillStartTime) {
-          gyroState.stillStartTime = Date.now();
-        } else if (Date.now() - gyroState.stillStartTime > 3000) {
-          gyroState.alphaDriftOffset = rawAlpha;
-        }
-      } else {
-        gyroState.stillStartTime = null;
-      }
-      gyroState.lastRawAlpha = rawAlpha;
-      
-      // Calculate compensated alpha
-      let compAlpha = rawAlpha - gyroState.alphaDriftOffset;
-
-      gyroState.alpha = THREE.MathUtils.degToRad(compAlpha);
-      gyroState.beta = THREE.MathUtils.degToRad(e.beta || 0);
-      gyroState.gamma = THREE.MathUtils.degToRad(e.gamma || 0);
-    }
-
-    const zee = new THREE.Vector3(0, 0, 1);
-    const euler = new THREE.Euler();
-    const q0 = new THREE.Quaternion();
-    const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
-
-    function renderGyro() {
-      // 1. Update Camera Rotation (Proper deviceorientation math)
-      euler.set(gyroState.beta, gyroState.alpha, -gyroState.gamma, 'YXZ');
-      camera.quaternion.setFromEuler(euler);
-      camera.quaternion.multiply(q1);
-      
-      const screenAngle = (screen.orientation && screen.orientation.angle !== undefined) ? screen.orientation.angle : (window.orientation || 0);
-      camera.quaternion.multiply(q0.setFromAxisAngle(zee, -screenAngle * Math.PI / 180));
-
-      // 2. Virtual Floor Reticle
-      if (!AppState.modelPlaced) {
-        const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-        if (dir.y < -0.05) { // Looking downwards
-          const distance = (AppState.virtualFloorY - camera.position.y) / dir.y;
-          const point = camera.position.clone().add(dir.multiplyScalar(distance));
-          reticle.position.copy(point);
-          reticle.rotation.x = -Math.PI / 2;
-          reticle.updateMatrix();
-          reticle.visible = true;
-        } else {
-          reticle.visible = false; // Looking up
-        }
-      }
-
-      renderer.render(scene, camera);
-    }
-
-    // Resize handler
+    // ── Resize ──
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
