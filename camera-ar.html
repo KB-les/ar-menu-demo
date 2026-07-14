@@ -12,10 +12,10 @@
       background: #000;
       color: #fff;
       overflow: hidden;
-      touch-action: none;
+      /* Only disable touch actions on the touch surface, let the body scroll if needed on error screens */
     }
     
-    /* Video feed for fallback mode */
+    /* 1. Camera Feed (Tier 2 & 3) */
     #camera-feed {
       position: absolute;
       top: 0; left: 0;
@@ -25,27 +25,38 @@
       display: none;
     }
 
-    /* Three.js Canvas */
+    /* 2. Three.js Canvas */
     #overlay-canvas {
       position: absolute;
       top: 0; left: 0;
       width: 100%; height: 100%;
       z-index: 10;
       outline: none;
+      pointer-events: none;
     }
 
-    /* UI Layer - wrapped in a DOM Overlay container for WebXR */
+    /* 3. Interaction Touch Surface (Separate from UI) */
+    #touch-surface {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 50;
+      touch-action: none;
+    }
+
+    /* 4. UI Layer */
     #ui-layer {
       position: absolute;
       top: 0; left: 0;
       width: 100%; height: 100%;
       z-index: 100;
-      pointer-events: none; /* Let touches pass through to canvas by default */
+      pointer-events: none; /* Let touches pass through to #touch-surface */
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
 
     .top-bar {
-      position: absolute;
-      top: 0; left: 0; right: 0;
       display: flex;
       justify-content: space-between;
       padding: max(16px, env(safe-area-inset-top)) 20px 16px;
@@ -55,15 +66,16 @@
     .back-btn {
       color: #fff; text-decoration: none; font-weight: 500; display: flex; align-items: center; gap: 6px;
     }
-    .badge {
-      background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 6px;
+    
+    /* Mode badge hidden by default, useful for debugging */
+    #mode-badge-container {
+      display: none; 
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(10px); padding: 6px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; align-items: center; gap: 6px;
     }
-    .badge .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; }
+    #mode-badge-container .dot { width: 8px; height: 8px; background: #22c55e; border-radius: 50%; }
 
     .bottom-bar {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      padding: 16px; padding-bottom: max(20px, env(safe-area-inset-bottom));
+      padding: 16px; padding-bottom: max(20px, env(safe-area-bottom));
       background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 100%);
       pointer-events: auto;
     }
@@ -75,42 +87,48 @@
     .btn:active { background: rgba(255,255,255,0.2); }
     .hint { text-align: center; font-size: 0.75rem; color: rgba(255,255,255,0.5); }
 
-    /* Startup Screen */
-    #startup-screen {
+    /* Startup / Error / Loading Screens */
+    .overlay-screen {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       background: rgba(10,10,10,0.95); z-index: 500;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       padding: 40px; text-align: center; backdrop-filter: blur(10px);
+      transition: opacity 0.3s;
     }
+    .overlay-screen.hidden { opacity: 0; pointer-events: none; display: none; }
+    
     .start-btn {
       background: #f59e0b; color: #000; border: none; padding: 16px 32px; border-radius: 12px; font-size: 1.1rem; font-weight: 700; cursor: pointer; margin-top: 24px;
     }
-    .startup-desc { color: rgba(255,255,255,0.7); margin-top: 12px; line-height: 1.5; font-size: 0.9rem;}
+    .start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .screen-desc { color: rgba(255,255,255,0.7); margin-top: 12px; line-height: 1.5; font-size: 0.9rem;}
 
-    /* Fullscreen loading */
-    #loading {
-      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      background: #000; z-index: 600; display: flex; align-items: center; justify-content: center; color: #f59e0b; font-weight: 600; transition: opacity 0.3s;
+    .progress-bar-container {
+      width: 100%; max-width: 200px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; margin-top: 20px; overflow: hidden;
     }
+    #progress-bar { width: 0%; height: 100%; background: #f59e0b; transition: width 0.1s; }
   </style>
 </head>
 <body>
 
-  <div id="loading">Loading Engine...</div>
-
-  <div id="startup-screen">
+  <!-- Fullscreen Initial Loading Screen -->
+  <div id="startup-screen" class="overlay-screen">
     <h2>AR Menu Preview</h2>
-    <p class="startup-desc">Place the dish on your table to see it in real life.</p>
-    <button class="start-btn" id="start-btn">Start AR</button>
+    <p class="screen-desc">Loading high-quality 3D model...</p>
+    <div class="progress-bar-container">
+      <div id="progress-bar"></div>
+    </div>
+    <button class="start-btn" id="start-btn" disabled style="display:none;">Start AR</button>
   </div>
 
   <video id="camera-feed" autoplay playsinline muted></video>
   <canvas id="overlay-canvas"></canvas>
+  <div id="touch-surface"></div>
 
   <div id="ui-layer">
     <div class="top-bar">
       <a href="index.html" class="back-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg> Menu</a>
-      <div class="badge"><div class="dot"></div> <span id="mode-badge">AR MODE</span></div>
+      <div id="mode-badge-container"><div class="dot"></div> <span id="mode-badge">AR MODE</span></div>
     </div>
 
     <div class="bottom-bar">
@@ -119,7 +137,7 @@
         <span class="dish-price">R85</span>
       </div>
       <div class="controls">
-        <button class="btn" id="btn-reset"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Reset</button>
+        <button class="btn" id="btn-reset"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg> Reset Position</button>
       </div>
       <div class="hint" id="interaction-hint">Point at a surface and tap to place</div>
     </div>
@@ -138,46 +156,51 @@
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    // ── DOM ──
-    const startBtn = document.getElementById('start-btn');
-    const startupScreen = document.getElementById('startup-screen');
-    const loadingScreen = document.getElementById('loading');
-    const video = document.getElementById('camera-feed');
-    const canvas = document.getElementById('overlay-canvas');
-    const hintText = document.getElementById('interaction-hint');
-    const modeBadge = document.getElementById('mode-badge');
-    const resetBtn = document.getElementById('btn-reset');
+    /* =========================================================================
+       1. CORE STATE & DOM
+       ========================================================================= */
+    const DOM = {
+      startBtn: document.getElementById('start-btn'),
+      startupScreen: document.getElementById('startup-screen'),
+      video: document.getElementById('camera-feed'),
+      canvas: document.getElementById('overlay-canvas'),
+      touchSurface: document.getElementById('touch-surface'),
+      hintText: document.getElementById('interaction-hint'),
+      modeBadge: document.getElementById('mode-badge'),
+      resetBtn: document.getElementById('btn-reset'),
+      progressBar: document.getElementById('progress-bar'),
+      desc: document.querySelector('.screen-desc')
+    };
 
-    // ── State ──
-    let mode = 'none'; // 'xr' | 'gyro'
-    let model = null;
-    let reticle = null;
-    let groundShadow = null;
-    let modelPlaced = false;
-    let baseScale = 1;
-    let currentScale = 1;
-    let modelRotationY = 0;
+    const AppState = {
+      tier: 0, // 1: Immersive-AR, 2: Inline XR, 3: Gyro Fallback
+      model: null,
+      modelBaseScale: 1,
+      modelCurrentScale: 1,
+      modelPlaced: false,
+      videoStream: null,
+      virtualFloorY: -1.5,
+      cameraFov: 70
+    };
 
-    // WebXR Hit Test
-    let hitTestSource = null;
-    let hitTestSourceRequested = false;
+    // Helper: Haptics
+    function vibrate(duration = 50) {
+      if (navigator.vibrate) navigator.vibrate(duration);
+    }
 
-    // Gyro Fallback
-    let deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
-    const gyroCameraOffset = new THREE.Vector3();
-    const virtualFloorY = -1.5;
-
-    // ── Three.js Setup ──
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    /* =========================================================================
+       2. THREE.JS RENDERER LAYER (Shared setup)
+       ========================================================================= */
+    const renderer = new THREE.WebGLRenderer({ canvas: DOM.canvas, alpha: true, antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.xr.enabled = true; // Enabled for WebXR
+    renderer.xr.enabled = true;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+    const camera = new THREE.PerspectiveCamera(AppState.cameraFov, window.innerWidth / window.innerHeight, 0.01, 20);
 
     // Lighting
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(2, 5, 3);
     scene.add(dirLight);
@@ -185,7 +208,7 @@
     // Reticle (Ring)
     const ringGeo = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
     const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.8, transparent: true });
-    reticle = new THREE.Mesh(ringGeo, ringMat);
+    const reticle = new THREE.Mesh(ringGeo, ringMat);
     reticle.matrixAutoUpdate = false;
     reticle.visible = false;
     scene.add(reticle);
@@ -195,85 +218,235 @@
     modelGroup.visible = false;
     scene.add(modelGroup);
 
-    // Ground Shadow (Fake AO for Tier 3)
+    // Fake Ground Shadow (Ambient Occlusion)
     const shadowGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
-    // Simple radial gradient texture for shadow
     const shadowCanvas = document.createElement('canvas');
     shadowCanvas.width = 128; shadowCanvas.height = 128;
     const ctx = shadowCanvas.getContext('2d');
     const grad = ctx.createRadialGradient(64,64,0, 64,64,64);
-    grad.addColorStop(0, 'rgba(0,0,0,0.5)');
+    grad.addColorStop(0, 'rgba(0,0,0,0.6)');
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(0,0,128,128);
     const shadowTex = new THREE.CanvasTexture(shadowCanvas);
-    const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.7, depthWrite: false });
-    groundShadow = new THREE.Mesh(shadowGeo, shadowMat);
-    groundShadow.position.y = 0.01;
+    const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, opacity: 0.8, depthWrite: false });
+    const groundShadow = new THREE.Mesh(shadowGeo, shadowMat);
+    groundShadow.position.y = 0.01; // Just above the floor
     modelGroup.add(groundShadow);
 
-    // ── Load Model ──
+
+    /* =========================================================================
+       3. PRELOADING (Immediate execution)
+       ========================================================================= */
+    const params = new URLSearchParams(window.location.search);
+    let modelFile = 'tasty_burger_with_fries.glb'; // Default
+    if (params.get('dish') === 'pizza') {
+      modelFile = 'pizza.glb'; // Example fallback
+    }
+
     const loader = new GLTFLoader();
-    loader.load('tasty_burger_with_fries.glb', (gltf) => {
-      model = gltf.scene;
+    loader.load(
+      modelFile,
+      (gltf) => {
+        AppState.model = gltf.scene;
+        
+        // Normalize size to ~30cm
+        const box = new THREE.Box3().setFromObject(AppState.model);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        
+        AppState.modelBaseScale = 0.3 / Math.max(size.x, size.z);
+        AppState.model.scale.setScalar(AppState.modelBaseScale);
+        
+        // Center bottom at origin
+        AppState.model.position.sub(center).multiplyScalar(AppState.modelBaseScale);
+        AppState.model.position.y = -box.min.y * AppState.modelBaseScale;
+        
+        modelGroup.add(AppState.model);
+        
+        // Update UI
+        DOM.desc.innerText = "Ready to serve.";
+        DOM.progress.parentElement.style.display = 'none';
+        DOM.startBtn.style.display = 'block';
+        DOM.startBtn.disabled = false;
+      },
+      (xhr) => {
+        if (xhr.lengthComputable) {
+          const percent = (xhr.loaded / xhr.total) * 100;
+          DOM.progressBar.style.width = percent + '%';
+        }
+      },
+      (error) => {
+        console.error('Model load failed:', error);
+        DOM.desc.innerHTML = '<span style="color:#ef4444;">Failed to load 3D model.</span><br>Please refresh and try again.';
+        DOM.progress.parentElement.style.display = 'none';
+      }
+    );
+
+
+    /* =========================================================================
+       4. INTERACTION LAYER (Abstracts touch events to commands)
+       ========================================================================= */
+    class InteractionLayer {
+      constructor(element) {
+        this.element = element;
+        this.touchState = { count: 0, dist: 0, lastX: 0 };
+        this.listeners = {};
+        
+        this.element.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+        this.element.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+      }
       
-      const box = new THREE.Box3().setFromObject(model);
-      const size = box.getSize(new THREE.Vector3());
-      const center = box.getCenter(new THREE.Vector3());
+      on(event, callback) { this.listeners[event] = callback; }
+      emit(event, data) { if (this.listeners[event]) this.listeners[event](data); }
       
-      // Scale to roughly 30cm across
-      baseScale = 0.3 / Math.max(size.x, size.z);
-      model.scale.setScalar(baseScale);
+      onTouchStart(e) {
+        e.preventDefault(); // Prevent accidental scroll/zoom
+        this.touchState.count = e.touches.length;
+        
+        if (!AppState.modelPlaced) {
+          this.emit('place');
+          return;
+        }
+        
+        if (this.touchState.count === 1) {
+          this.touchState.lastX = e.touches[0].clientX;
+        } else if (this.touchState.count === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          this.touchState.dist = Math.sqrt(dx*dx + dy*dy);
+        }
+      }
       
-      // Center bottom at origin
-      model.position.sub(center).multiplyScalar(baseScale);
-      model.position.y = -box.min.y * baseScale;
+      onTouchMove(e) {
+        e.preventDefault();
+        if (!AppState.modelPlaced) return;
+        
+        if (e.touches.length === 1 && this.touchState.count === 1) {
+          const dx = e.touches[0].clientX - this.touchState.lastX;
+          this.emit('rotate', dx * 0.01);
+          this.touchState.lastX = e.touches[0].clientX;
+        } else if (e.touches.length === 2 && this.touchState.count === 2) {
+          const dx = e.touches[0].clientX - e.touches[1].clientX;
+          const dy = e.touches[0].clientY - e.touches[1].clientY;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          const scaleDelta = dist / this.touchState.dist;
+          this.emit('scale', scaleDelta);
+          this.touchState.dist = dist;
+        }
+      }
+    }
+
+    const interaction = new InteractionLayer(DOM.touchSurface);
+
+    interaction.on('place', () => {
+      if (!reticle.visible) return;
+      vibrate();
+      modelGroup.position.setFromMatrixPosition(reticle.matrix);
+      // Keep model flat on floor (only copy Y rotation)
+      const euler = new THREE.Euler().setFromRotationMatrix(reticle.matrix);
+      modelGroup.rotation.y = euler.y;
       
-      modelGroup.add(model);
-      loadingScreen.style.opacity = '0';
-      setTimeout(() => loadingScreen.style.display = 'none', 300);
+      modelGroup.visible = true;
+      reticle.visible = false;
+      AppState.modelPlaced = true;
+      DOM.hintText.innerText = "1-finger rotate · 2-finger pinch zoom";
     });
 
-    // ── Detection & Init ──
-    startBtn.addEventListener('click', async () => {
-      startupScreen.style.display = 'none';
+    interaction.on('rotate', (deltaRotationY) => {
+      modelGroup.rotation.y += deltaRotationY;
+    });
 
-      // 1. Try Native WebXR
+    interaction.on('scale', (scaleDelta) => {
+      AppState.modelCurrentScale *= scaleDelta;
+      AppState.modelCurrentScale = Math.max(0.2, Math.min(AppState.modelCurrentScale, 3));
+      AppState.model.scale.setScalar(AppState.modelBaseScale * AppState.modelCurrentScale);
+      groundShadow.scale.setScalar(AppState.modelCurrentScale);
+    });
+
+    DOM.resetBtn.addEventListener('click', () => {
+      AppState.modelPlaced = false;
+      modelGroup.visible = false;
+      reticle.visible = true;
+      DOM.hintText.innerText = "Point at a surface and tap to place";
+      AppState.modelCurrentScale = 1;
+      if (AppState.model) AppState.model.scale.setScalar(AppState.modelBaseScale);
+      groundShadow.scale.setScalar(1);
+    });
+
+
+    /* =========================================================================
+       5. DETECTION & ROUTING LAYER
+       ========================================================================= */
+    DOM.startBtn.addEventListener('click', async () => {
+      DOM.startupScreen.classList.add('hidden');
+
       if (navigator.xr) {
-        try {
-          const supported = await navigator.xr.isSessionSupported('immersive-ar');
-          if (supported) {
-            startWebXR();
-            return;
-          }
-        } catch (e) { console.warn("WebXR check failed", e); }
+        // TIER 1: True AR
+        const immersiveSupported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (immersiveSupported) {
+          startWebXR('immersive-ar');
+          return;
+        }
+        
+        // TIER 2: Inline XR (Better sensor fusion than raw gyro)
+        const inlineSupported = await navigator.xr.isSessionSupported('inline');
+        if (inlineSupported && 'XRDOMOverlayState' in window) {
+          startWebXR('inline');
+          return;
+        }
       }
 
-      // 2. Fallback to Gyro + Video
+      // TIER 3: Raw Gyro Fallback
       startGyroFallback();
     });
 
-    // ── Tier 1: WebXR Immersive AR ──
-    async function startWebXR() {
-      mode = 'xr';
-      modeBadge.innerText = 'XR AR';
+    // Clean up camera stream on exit
+    window.addEventListener('beforeunload', () => {
+      if (AppState.videoStream) {
+        AppState.videoStream.getTracks().forEach(t => t.stop());
+      }
+      if (renderer.xr.getSession()) {
+        renderer.xr.getSession().end();
+      }
+    });
+
+
+    /* =========================================================================
+       6. TIER 1 & 2: WebXR Session Manager
+       ========================================================================= */
+    let hitTestSource = null;
+    let hitTestSourceRequested = false;
+
+    async function startWebXR(sessionMode) {
+      AppState.tier = sessionMode === 'immersive-ar' ? 1 : 2;
+      DOM.modeBadge.innerText = AppState.tier === 1 ? 'REAL AR' : 'SCREEN AR';
       
       const sessionInit = {
-        requiredFeatures: ['hit-test', 'dom-overlay'],
+        requiredFeatures: AppState.tier === 1 ? ['hit-test', 'dom-overlay'] : ['dom-overlay'],
         domOverlay: { root: document.getElementById('ui-layer') }
       };
 
       try {
-        const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
-        renderer.xr.setReferenceSpaceType('local');
+        const session = await navigator.xr.requestSession(sessionMode, sessionInit);
+        renderer.xr.setReferenceSpaceType(AppState.tier === 1 ? 'local' : 'viewer');
         await renderer.xr.setSession(session);
         
-        session.addEventListener('end', () => { window.location.reload(); });
+        // Session Recovery: if WebXR drops, fall back to gyro seamlessly
+        session.addEventListener('end', () => {
+          renderer.xr.setSession(null);
+          startGyroFallback();
+        });
         
+        if (AppState.tier === 2) {
+          // Inline XR requires the manual background video
+          await startCameraFeed();
+        }
+
         renderer.setAnimationLoop(renderXR);
       } catch (e) {
-        console.error("Failed to start WebXR", e);
-        startGyroFallback(); // Fallback if session fails
+        console.error("WebXR Session failed", e);
+        startGyroFallback();
       }
     }
 
@@ -281,27 +454,42 @@
       if (!frame) return;
       const session = renderer.xr.getSession();
 
-      if (!modelPlaced) {
-        if (!hitTestSourceRequested) {
-          session.requestReferenceSpace('viewer').then((refSpace) => {
-            session.requestHitTestSource({ space: refSpace }).then((source) => {
-              hitTestSource = source;
+      if (!AppState.modelPlaced) {
+        if (AppState.tier === 1) {
+          // TIER 1: Real Hit Testing
+          if (!hitTestSourceRequested) {
+            session.requestReferenceSpace('viewer').then((refSpace) => {
+              session.requestHitTestSource({ space: refSpace }).then((source) => { hitTestSource = source; });
             });
-          });
-          hitTestSourceRequested = true;
-        }
+            hitTestSourceRequested = true;
+          }
 
-        if (hitTestSource) {
-          const refSpace = renderer.xr.getReferenceSpace();
-          const hitTestResults = frame.getHitTestResults(hitTestSource);
-
-          if (hitTestResults.length > 0) {
-            const hit = hitTestResults[0];
-            const pose = hit.getPose(refSpace);
+          if (hitTestSource) {
+            const refSpace = renderer.xr.getReferenceSpace();
+            const hitTestResults = frame.getHitTestResults(hitTestSource);
+            if (hitTestResults.length > 0) {
+              const hit = hitTestResults[0];
+              const pose = hit.getPose(refSpace);
+              reticle.visible = true;
+              reticle.matrix.fromArray(pose.transform.matrix);
+            } else {
+              reticle.visible = false;
+            }
+          }
+        } else {
+          // TIER 2 (Inline): Virtual Floor Raycast
+          const xrCamera = renderer.xr.getCamera(camera);
+          const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(xrCamera.quaternion).normalize();
+          
+          if (dir.y < -0.05) { // Looking downwards
+            const distance = (AppState.virtualFloorY - xrCamera.position.y) / dir.y;
+            const point = xrCamera.position.clone().add(dir.multiplyScalar(distance));
+            reticle.position.copy(point);
+            reticle.rotation.x = -Math.PI / 2;
+            reticle.updateMatrix();
             reticle.visible = true;
-            reticle.matrix.fromArray(pose.transform.matrix);
           } else {
-            reticle.visible = false;
+            reticle.visible = false; // Looking up
           }
         }
       }
@@ -309,23 +497,29 @@
       renderer.render(scene, camera);
     }
 
-    // ── Tier 3: Gyroscope Fallback ──
+
+    /* =========================================================================
+       7. TIER 3: Raw Gyroscope Fallback (with Drift Compensation)
+       ========================================================================= */
+    let gyroState = {
+      alpha: 0, beta: 0, gamma: 0,
+      alphaDriftOffset: 0,
+      lastRawAlpha: 0,
+      stillStartTime: null
+    };
+
     async function startGyroFallback() {
-      mode = 'gyro';
-      modeBadge.innerText = 'GYRO AR';
-      video.style.display = 'block';
+      AppState.tier = 3;
+      DOM.modeBadge.innerText = 'GYRO AR';
       renderer.xr.enabled = false;
       
-      // Start Camera
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        video.srcObject = stream;
-      } catch (e) {
-        alert("Camera permission denied. Cannot start AR.");
-        return;
-      }
+      // Clear any XR transforms
+      camera.position.set(0, 0, 0);
+      camera.rotation.set(0, 0, 0);
+      
+      await startCameraFeed();
 
-      // Start Gyro (Request permission on iOS)
+      // Request permission on iOS 13+
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
           const perm = await DeviceOrientationEvent.requestPermission();
@@ -335,15 +529,45 @@
         window.addEventListener('deviceorientation', handleOrientation);
       }
 
-      // Initial virtual setup
-      camera.position.set(0, 0, 0);
       renderer.setAnimationLoop(renderGyro);
     }
 
+    async function startCameraFeed() {
+      DOM.video.style.display = 'block';
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'environment', aspectRatio: { ideal: window.innerHeight / window.innerWidth } } 
+        });
+        AppState.videoStream = stream;
+        DOM.video.srcObject = stream;
+      } catch (e) {
+        console.warn("Camera permission denied.", e);
+        DOM.video.style.display = 'none'; // Will just show a black background
+      }
+    }
+
     function handleOrientation(e) {
-      deviceOrientation.alpha = THREE.MathUtils.degToRad(e.alpha || 0);
-      deviceOrientation.beta = THREE.MathUtils.degToRad(e.beta || 0);
-      deviceOrientation.gamma = THREE.MathUtils.degToRad(e.gamma || 0);
+      const rawAlpha = e.alpha || 0;
+      
+      // Drift Compensation Logic
+      // If phone is perfectly still for 3 seconds, freeze the drift offset
+      if (Math.abs(rawAlpha - gyroState.lastRawAlpha) < 0.05) {
+        if (!gyroState.stillStartTime) {
+          gyroState.stillStartTime = Date.now();
+        } else if (Date.now() - gyroState.stillStartTime > 3000) {
+          gyroState.alphaDriftOffset = rawAlpha;
+        }
+      } else {
+        gyroState.stillStartTime = null;
+      }
+      gyroState.lastRawAlpha = rawAlpha;
+      
+      // Calculate compensated alpha
+      let compAlpha = rawAlpha - gyroState.alphaDriftOffset;
+
+      gyroState.alpha = THREE.MathUtils.degToRad(compAlpha);
+      gyroState.beta = THREE.MathUtils.degToRad(e.beta || 0);
+      gyroState.gamma = THREE.MathUtils.degToRad(e.gamma || 0);
     }
 
     const zee = new THREE.Vector3(0, 0, 1);
@@ -352,109 +576,31 @@
     const q1 = new THREE.Quaternion(-Math.sqrt(0.5), 0, 0, Math.sqrt(0.5));
 
     function renderGyro() {
-      // 1. Update Camera Rotation from Gyro
-      euler.set(deviceOrientation.beta, deviceOrientation.alpha, -deviceOrientation.gamma, 'YXZ');
+      // 1. Update Camera Rotation (Proper deviceorientation math)
+      euler.set(gyroState.beta, gyroState.alpha, -gyroState.gamma, 'YXZ');
       camera.quaternion.setFromEuler(euler);
       camera.quaternion.multiply(q1);
-      camera.quaternion.multiply(q0.setFromAxisAngle(zee, -window.orientation * Math.PI / 180 || 0));
+      
+      const screenAngle = (screen.orientation && screen.orientation.angle !== undefined) ? screen.orientation.angle : (window.orientation || 0);
+      camera.quaternion.multiply(q0.setFromAxisAngle(zee, -screenAngle * Math.PI / 180));
 
-      // 2. Update Virtual Reticle
-      if (!modelPlaced) {
-        reticle.visible = true;
-        // Raycast from camera center to virtual floor (y = -1.5)
+      // 2. Virtual Floor Reticle
+      if (!AppState.modelPlaced) {
         const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-        if (dir.y < -0.1) { // Looking downwards
-          const distance = (virtualFloorY - camera.position.y) / dir.y;
+        if (dir.y < -0.05) { // Looking downwards
+          const distance = (AppState.virtualFloorY - camera.position.y) / dir.y;
           const point = camera.position.clone().add(dir.multiplyScalar(distance));
           reticle.position.copy(point);
           reticle.rotation.x = -Math.PI / 2;
           reticle.updateMatrix();
+          reticle.visible = true;
         } else {
-          // Looking up, push reticle out to fixed distance
-          const point = camera.position.clone().add(dir.multiplyScalar(4));
-          point.y = virtualFloorY;
-          reticle.position.copy(point);
-          reticle.updateMatrix();
+          reticle.visible = false; // Looking up
         }
       }
 
       renderer.render(scene, camera);
     }
-
-    // ── Unified Interaction ──
-    // Place model
-    function placeAtReticle() {
-      if (!reticle.visible) return;
-      modelGroup.position.setFromMatrixPosition(reticle.matrix);
-      // Copy rotation but only Y axis to stay flat on floor
-      const e = new THREE.Euler().setFromRotationMatrix(reticle.matrix);
-      modelGroup.rotation.y = e.y;
-      
-      modelGroup.visible = true;
-      reticle.visible = false;
-      modelPlaced = true;
-      hintText.innerText = "1-finger rotate · 2-finger scale";
-    }
-
-    // Global touch handler
-    let touchState = { count: 0, dist: 0, lastX: 0 };
-    
-    // UI layer shouldn't block touch, but just in case we attach to document
-    document.addEventListener('touchstart', (e) => {
-      if (e.target.closest('.btn') || e.target.closest('.back-btn')) return; // Ignore UI clicks
-      
-      if (!modelPlaced) {
-        placeAtReticle();
-        return;
-      }
-      
-      touchState.count = e.touches.length;
-      if (touchState.count === 1) {
-        touchState.lastX = e.touches[0].clientX;
-      } else if (touchState.count === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        touchState.dist = Math.sqrt(dx*dx + dy*dy);
-      }
-    });
-
-    document.addEventListener('touchmove', (e) => {
-      if (!modelPlaced || !modelGroup.visible) return;
-      
-      if (e.touches.length === 1 && touchState.count === 1) {
-        // Rotate
-        const dx = e.touches[0].clientX - touchState.lastX;
-        modelRotationY += dx * 0.01;
-        modelGroup.rotation.y = modelRotationY;
-        touchState.lastX = e.touches[0].clientX;
-      } else if (e.touches.length === 2 && touchState.count === 2) {
-        // Scale
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        const scaleDelta = dist / touchState.dist;
-        
-        currentScale *= scaleDelta;
-        currentScale = Math.max(0.2, Math.min(currentScale, 3));
-        model.scale.setScalar(baseScale * currentScale);
-        
-        // Scale shadow
-        groundShadow.scale.setScalar(currentScale);
-        
-        touchState.dist = dist;
-      }
-    });
-
-    // Reset button
-    resetBtn.addEventListener('click', () => {
-      modelPlaced = false;
-      modelGroup.visible = false;
-      reticle.visible = true;
-      hintText.innerText = "Point at a surface and tap to place";
-      currentScale = 1;
-      model.scale.setScalar(baseScale);
-      groundShadow.scale.setScalar(1);
-    });
 
     // Resize handler
     window.addEventListener('resize', () => {
