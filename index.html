@@ -458,8 +458,8 @@
     
     function updateCartUI() {
       const cart = getCart();
-      const count = cart.length;
-      const total = cart.reduce((sum, item) => sum + item.price, 0);
+      const count = cart.reduce((sum, item) => sum + (item.qty || 1), 0);
+      const total = cart.reduce((sum, item) => sum + (item.price * (item.qty || 1)), 0);
       
       const badge = document.getElementById('cart-badge');
       badge.innerText = count > 0 ? count : '';
@@ -474,7 +474,9 @@
         const price = parseInt(btn.getAttribute('data-price'), 10);
         
         const cart = getCart();
-        cart.push({ id, name, price, addedAt: Date.now() });
+        const existing = cart.find(item => item.id === id);
+        if (existing) existing.qty = (existing.qty || 1) + 1;
+        else cart.push({ id, name, price, qty: 1 });
         saveCart(cart);
         updateCartUI();
         
