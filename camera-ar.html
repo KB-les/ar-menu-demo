@@ -224,45 +224,36 @@
     groundPlane.position.y = -0.004;
     scene.add(groundPlane);
 
-    // 2. Directional baked shadow (tight ellipse at the model's base)
+    // 2. Directional baked shadow — soft ellipse, sized to plate footprint
     const dirShadow = (() => {
       const c = document.createElement('canvas'); c.width = c.height = 256;
       const cx = c.getContext('2d');
       cx.save();
-      cx.translate(136, 128); // Small offset in light direction
-      cx.scale(1, 0.45);      // Moderate flatten — not too elongated
-      const grd = cx.createRadialGradient(0, 0, 20, 0, 0, 110);
-      grd.addColorStop(0, 'rgba(0,0,0,0.55)');
-      grd.addColorStop(0.6, 'rgba(0,0,0,0.30)');
-      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.translate(133, 128);
+      cx.scale(1.0, 0.5);
+      const grd = cx.createRadialGradient(0, 0, 0, 0, 0, 115);
+      grd.addColorStop(0,   'rgba(0,0,0,0.50)');
+      grd.addColorStop(0.55,'rgba(0,0,0,0.28)');
+      grd.addColorStop(1,   'rgba(0,0,0,0)');
       cx.fillStyle = grd;
       cx.beginPath();
-      cx.arc(0, 0, 110, 0, Math.PI * 2);
+      cx.arc(0, 0, 115, 0, Math.PI * 2);
       cx.fill();
       cx.restore();
       const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.65, 0.65).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, opacity: 0.85 })
+        new THREE.PlaneGeometry(0.42, 0.42).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, opacity: 0.9 })
       );
-      mesh.position.set(0.03, 0.002, 0.05);
+      mesh.position.set(0.02, 0.002, 0.04);
       return mesh;
     })();
     modelGroup.add(dirShadow);
     const shadowDisc = dirShadow;
 
-    // 3. AO contact ring — tight ring right at the model's base
-    const aoRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.15, 0.21, 64).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false })
-    );
-    aoRing.position.y = 0.003;
-    modelGroup.add(aoRing);
-
     // ── Preload model immediately ──
-    // Placement bounce animation state
     let placementAnimating = false;
     let placementAnimStart = 0;
-    const PLACEMENT_DURATION = 420; // ms
+    const PLACEMENT_DURATION = 420;
 
     new GLTFLoader().load(
       'tasty_burger_with_fries.glb',
@@ -271,7 +262,13 @@
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
-        modelBaseScale = 0.32 / Math.max(size.x, size.y, size.z);
+
+        // Life-size: target 26cm plate diameter.
+        // Scale by the XZ footprint (width/depth), NOT the max dimension (height),
+        // so the plate is the right width and the burger stands at natural height.
+        const footprint = Math.max(size.x, size.z);
+        modelBaseScale = 0.26 / footprint;
+
         model.scale.setScalar(modelBaseScale);
         model.position.set(
           -center.x * modelBaseScale,
@@ -279,7 +276,6 @@
           -center.z * modelBaseScale
         );
 
-        // Enable shadow casting on every mesh in the model
         model.traverse(child => {
           if (child.isMesh) {
             child.castShadow = true;
@@ -288,8 +284,6 @@
         });
 
         modelGroup.add(model);
-
-        // Show start button
         dom.desc.innerText = 'Ready!';
         dom.progress.parentElement.style.display = 'none';
         dom.startBtn.style.display = 'block';
@@ -481,9 +475,8 @@
     function applyModelScale() {
       if (!model) return;
       model.scale.setScalar(modelBaseScale * modelScale);
-      // Scale shadow and AO ring together with the model
       shadowDisc.scale.setScalar(modelScale);
-      aoRing.scale.setScalar(modelScale);
+      // aoRing removed
     }
 
     function resetPlacement() {
