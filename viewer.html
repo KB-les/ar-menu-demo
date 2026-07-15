@@ -330,18 +330,18 @@
   <div class="info-card">
     <div class="info-inner">
       <div class="info-row">
-        <span class="dish-name">Signature Burger</span>
-        <span class="dish-price">R85</span>
+        <span class="dish-name" id="dish-name">Signature Burger</span>
+        <span class="dish-price" id="dish-price">R85</span>
       </div>
-      <div class="dish-desc">
+      <div class="dish-desc" id="dish-desc">
         Juicy beef patty, melted cheddar, fresh lettuce, tomato &amp; our secret sauce on a toasted brioche bun.
       </div>
       <div class="action-row">
-        <button class="btn-primary" onclick="alert('Added to order!')">
+        <button class="btn-primary" id="btn-add">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
           Add to Order
         </button>
-        <a href="camera-ar.html" class="btn-secondary">
+        <a href="camera-ar.html" class="btn-secondary" id="btn-camera">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/></svg>
           Camera
         </a>
@@ -350,7 +350,24 @@
   </div>
 
   <script>
+    const DISHES = {
+      burger: { name: 'Signature Burger', price: 85, model: 'tasty_burger_with_fries.glb', desc: 'Juicy beef patty, melted cheddar, fresh lettuce, tomato & our secret sauce on a toasted brioche bun.' },
+      pizza:  { name: 'Margherita Pizza',  price: 95, model: 'pizza.glb', desc: 'San Marzano tomato, fresh mozzarella, basil, and extra virgin olive oil on a crispy wood-fired base.' },
+      sushi:  { name: 'Sushi Platter',     price: 145, model: 'sushi.glb', desc: '12-piece assorted sushi platter with salmon, tuna, prawn, and avocado. Served with wasabi and pickled ginger.' }
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const dishId = DISHES[params.get('dish')] ? params.get('dish') : 'burger';
+    const dish = DISHES[dishId];
+
+    document.getElementById('dish-name').innerText = dish.name;
+    document.getElementById('dish-price').innerText = `R${dish.price}`;
+    document.getElementById('dish-desc').innerText = dish.desc;
+    document.getElementById('btn-camera').href = `camera-ar.html?dish=${dishId}`;
+
     const modelViewer = document.getElementById('model');
+    modelViewer.src = dish.model;
+    
     const loadingOverlay = document.getElementById('loading');
 
     modelViewer.addEventListener('load', () => {
@@ -359,6 +376,24 @@
 
     // Fallback hide loading after 8s
     setTimeout(() => loadingOverlay.classList.add('hidden'), 8000);
+
+    // Cart Logic
+    const addBtn = document.getElementById('btn-add');
+    addBtn.addEventListener('click', () => {
+      try {
+        const cart = JSON.parse(localStorage.getItem('arMenuCart') || '[]');
+        cart.push({ id: dishId, name: dish.name, price: dish.price, addedAt: Date.now() });
+        localStorage.setItem('arMenuCart', JSON.stringify(cart));
+        
+        if (navigator.vibrate) navigator.vibrate(40);
+        
+        const originalText = addBtn.innerHTML;
+        addBtn.innerHTML = '✓ Added';
+        setTimeout(() => addBtn.innerHTML = originalText, 1200);
+      } catch (e) {
+        console.error(e);
+      }
+    });
   </script>
 </body>
 </html>

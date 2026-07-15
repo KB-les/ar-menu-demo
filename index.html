@@ -291,6 +291,22 @@
       cursor: pointer;
     }
 
+    /* Cart badge */
+    .cart-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #f59e0b;
+      color: #000;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 0.7rem;
+      font-weight: 800;
+      margin-left: 4px;
+    }
+    .cart-badge:empty { display: none; }
+
     /* ── Animations ── */
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(20px); }
@@ -355,13 +371,13 @@
         </div>
         <div class="dish-desc">Juicy beef patty, melted cheddar, fresh lettuce, tomato &amp; our secret sauce on a toasted brioche bun.</div>
         <div class="card-actions">
-          <a href="viewer.html" class="btn btn-view">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-            Full 3D View
-          </a>
-          <a href="camera-ar.html" class="btn btn-camera">
+          <button class="btn btn-view btn-add" data-id="burger" data-name="Signature Burger" data-price="85">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            Add to Order
+          </button>
+          <a href="camera-ar.html?dish=burger" class="btn btn-camera">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3"/></svg>
-            Camera
+            Camera AR
           </a>
         </div>
       </div>
@@ -420,15 +436,59 @@
   <!-- ── Sticky footer ── -->
   <div class="footer">
     <div class="footer-inner">
-      <div class="footer-info">
-        <strong>1</strong> item in view
+      <div class="footer-info" id="cart-info">
+        <strong>0</strong> items · R0
       </div>
-      <button class="footer-btn" onclick="alert('Order feature coming soon!')">
+      <button class="footer-btn" onclick="alert('Checkout feature coming soon!')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        View Order
+        View Order <span class="cart-badge" id="cart-badge"></span>
       </button>
     </div>
   </div>
 
+  <script>
+    function getCart() {
+      try { return JSON.parse(localStorage.getItem('arMenuCart') || '[]'); }
+      catch (e) { return []; }
+    }
+    
+    function saveCart(cart) {
+      localStorage.setItem('arMenuCart', JSON.stringify(cart));
+    }
+    
+    function updateCartUI() {
+      const cart = getCart();
+      const count = cart.length;
+      const total = cart.reduce((sum, item) => sum + item.price, 0);
+      
+      const badge = document.getElementById('cart-badge');
+      badge.innerText = count > 0 ? count : '';
+      
+      document.getElementById('cart-info').innerHTML = `<strong>${count}</strong> item${count !== 1 ? 's' : ''} · R${total}`;
+    }
+
+    document.querySelectorAll('.btn-add').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = btn.getAttribute('data-id');
+        const name = btn.getAttribute('data-name');
+        const price = parseInt(btn.getAttribute('data-price'), 10);
+        
+        const cart = getCart();
+        cart.push({ id, name, price, addedAt: Date.now() });
+        saveCart(cart);
+        updateCartUI();
+        
+        if (navigator.vibrate) navigator.vibrate(40);
+        
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '✓ Added';
+        setTimeout(() => btn.innerHTML = originalText, 1200);
+      });
+    });
+
+    // Update UI on load and when returning from other pages
+    updateCartUI();
+    window.addEventListener('pageshow', updateCartUI);
+  </script>
 </body>
 </html>
