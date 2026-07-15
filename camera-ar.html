@@ -224,38 +224,36 @@
     groundPlane.position.y = -0.004;
     scene.add(groundPlane);
 
-    // 2. Directional baked shadow (ellipse stretched away from key light)
+    // 2. Directional baked shadow (tight ellipse at the model's base)
     const dirShadow = (() => {
       const c = document.createElement('canvas'); c.width = c.height = 256;
       const cx = c.getContext('2d');
       cx.save();
-      cx.translate(148, 128); // Offset towards the shadow direction
-      cx.scale(1, 0.32);      // Flatten to simulate light from above
+      cx.translate(136, 128); // Small offset in light direction
+      cx.scale(1, 0.45);      // Moderate flatten — not too elongated
+      const grd = cx.createRadialGradient(0, 0, 20, 0, 0, 110);
+      grd.addColorStop(0, 'rgba(0,0,0,0.55)');
+      grd.addColorStop(0.6, 'rgba(0,0,0,0.30)');
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = grd;
       cx.beginPath();
-      cx.arc(0, 0, 105, 0, Math.PI * 2);
-      cx.fillStyle = 'rgba(0,0,0,0.52)';
+      cx.arc(0, 0, 110, 0, Math.PI * 2);
       cx.fill();
-      // Sharp contact ring
-      cx.beginPath();
-      cx.arc(0, 0, 108, 0, Math.PI * 2);
-      cx.lineWidth = 4;
-      cx.strokeStyle = 'rgba(0,0,0,0.22)';
-      cx.stroke();
       cx.restore();
       const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(1.4, 1.4).rotateX(-Math.PI / 2),
-        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false })
+        new THREE.PlaneGeometry(0.65, 0.65).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, opacity: 0.85 })
       );
-      mesh.position.set(0.08, 0.002, 0.14); // Shift in light direction
+      mesh.position.set(0.03, 0.002, 0.05);
       return mesh;
     })();
     modelGroup.add(dirShadow);
-    const shadowDisc = dirShadow; // Keep alias so scale handlers still work
+    const shadowDisc = dirShadow;
 
-    // 3. AO contact ring — darkens edge where plate meets table
+    // 3. AO contact ring — tight ring right at the model's base
     const aoRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.44, 0.56, 64).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false })
+      new THREE.RingGeometry(0.15, 0.21, 64).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false })
     );
     aoRing.position.y = 0.003;
     modelGroup.add(aoRing);
