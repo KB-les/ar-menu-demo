@@ -162,16 +162,41 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.9;
 
     // ── Scene ──
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 30);
 
-    // Lights
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.3);
-    sun.position.set(2, 5, 3);
-    scene.add(sun);
+    // ── 3-Light Rig (Key + Fill + Rim) ──
+    scene.add(new THREE.AmbientLight(0xfff8f0, 0.5));
+
+    // Key light — upper left, matches common indoor light direction
+    const keyLight = new THREE.DirectionalLight(0xfff5e6, 1.4);
+    keyLight.position.set(-3, 5, 2);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.near = 0.1;
+    keyLight.shadow.camera.far = 12;
+    keyLight.shadow.camera.left = -2;
+    keyLight.shadow.camera.right = 2;
+    keyLight.shadow.camera.top = 2;
+    keyLight.shadow.camera.bottom = -2;
+    keyLight.shadow.bias = -0.001;
+    scene.add(keyLight);
+
+    // Fill light — cooler, right side
+    const fillLight = new THREE.DirectionalLight(0xd0e8ff, 0.45);
+    fillLight.position.set(3, 3, -1);
+    scene.add(fillLight);
+
+    // Rim light — back edge highlight
+    const rimLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    rimLight.position.set(0, 1, -4);
+    scene.add(rimLight);
 
     // Reticle — use matrixAutoUpdate=true, set position directly
     const reticleGeo = new THREE.RingGeometry(0.12, 0.17, 32);
@@ -188,23 +213,59 @@
     modelGroup.visible = false;
     scene.add(modelGroup);
 
-    // Shadow disc beneath model
-    const shadowDisc = (() => {
-      const c = document.createElement('canvas'); c.width = c.height = 128;
+    // ── Grounding System ──
+
+    // 1. Invisible shadow-receiver plane (catches real Three.js shadows from keyLight)
+    const groundPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(10, 10).rotateX(-Math.PI / 2),
+      new THREE.ShadowMaterial({ opacity: 0.38 })
+    );
+    groundPlane.receiveShadow = true;
+    groundPlane.position.y = -0.004;
+    scene.add(groundPlane);
+
+    // 2. Directional baked shadow (ellipse stretched away from key light)
+    const dirShadow = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 256;
       const cx = c.getContext('2d');
-      const g = cx.createRadialGradient(64,64,0,64,64,64);
-      g.addColorStop(0,'rgba(0,0,0,0.55)'); g.addColorStop(1,'rgba(0,0,0,0)');
-      cx.fillStyle = g; cx.fillRect(0,0,128,128);
+      cx.save();
+      cx.translate(148, 128); // Offset towards the shadow direction
+      cx.scale(1, 0.32);      // Flatten to simulate light from above
+      cx.beginPath();
+      cx.arc(0, 0, 105, 0, Math.PI * 2);
+      cx.fillStyle = 'rgba(0,0,0,0.52)';
+      cx.fill();
+      // Sharp contact ring
+      cx.beginPath();
+      cx.arc(0, 0, 108, 0, Math.PI * 2);
+      cx.lineWidth = 4;
+      cx.strokeStyle = 'rgba(0,0,0,0.22)';
+      cx.stroke();
+      cx.restore();
       const mesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2),
+        new THREE.PlaneGeometry(1.4, 1.4).rotateX(-Math.PI / 2),
         new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false })
       );
-      mesh.position.y = 0.005;
+      mesh.position.set(0.08, 0.002, 0.14); // Shift in light direction
       return mesh;
     })();
-    modelGroup.add(shadowDisc);
+    modelGroup.add(dirShadow);
+    const shadowDisc = dirShadow; // Keep alias so scale handlers still work
+
+    // 3. AO contact ring — darkens edge where plate meets table
+    const aoRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.44, 0.56, 64).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22, depthWrite: false })
+    );
+    aoRing.position.y = 0.003;
+    modelGroup.add(aoRing);
 
     // ── Preload model immediately ──
+    // Placement bounce animation state
+    let placementAnimating = false;
+    let placementAnimStart = 0;
+    const PLACEMENT_DURATION = 420; // ms
+
     new GLTFLoader().load(
       'tasty_burger_with_fries.glb',
       gltf => {
@@ -219,6 +280,15 @@
           -box.min.y * modelBaseScale,
           -center.z * modelBaseScale
         );
+
+        // Enable shadow casting on every mesh in the model
+        model.traverse(child => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
         modelGroup.add(model);
 
         // Show start button
@@ -294,6 +364,7 @@
     // ── Render loop (gyro mode) ──
     function renderLoop() {
       if (gyroRunning) applyGyroToCamera();
+      updatePlacementAnim(performance.now());
 
       if (!modelPlaced) {
         const hit = floorIntersect();
@@ -342,16 +413,38 @@
       renderer.render(scene, camera);
     }
 
-    // ── Placement ──
+    // ── Placement with bounce animation ──
+    // easeOutBack for the satisfying 'thud' feel
+    function easeOutBack(t) {
+      const c1 = 1.70158, c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    }
+
     function placeModel() {
       if (!reticleMesh.visible) return;
+      // Move ground plane to match placement so shadows fall correctly
+      groundPlane.position.set(reticleMesh.position.x, reticleMesh.position.y - 0.004, reticleMesh.position.z);
       modelGroup.position.copy(reticleMesh.position);
       modelGroup.rotation.y = modelRotY;
+      modelGroup.scale.setScalar(0); // Start at 0 for bounce-in
       modelGroup.visible = true;
       reticleMesh.visible = false;
       modelPlaced = true;
+      placementAnimating = true;
+      placementAnimStart = performance.now();
       dom.hint.innerText = '1-finger drag to rotate · 2-finger pinch to scale';
-      if (navigator.vibrate) navigator.vibrate(50);
+      if (navigator.vibrate) navigator.vibrate([30, 20, 10]); // Double tap feel
+    }
+
+    function updatePlacementAnim(now) {
+      if (!placementAnimating) return;
+      const t = Math.min((now - placementAnimStart) / PLACEMENT_DURATION, 1);
+      const s = easeOutBack(t);
+      modelGroup.scale.setScalar(s * modelScale);
+      if (t >= 1) {
+        placementAnimating = false;
+        modelGroup.scale.setScalar(modelScale);
+      }
     }
 
     // ── Touch Interaction Layer ──
@@ -382,34 +475,38 @@
         const d = Math.hypot(dx, dy);
         const delta = d / ts.dist;
         modelScale = Math.max(0.3, Math.min(modelScale * delta, 4));
-        if (model) model.scale.setScalar(modelBaseScale * modelScale);
-        shadowDisc.scale.setScalar(modelScale);
+        applyModelScale();
         ts.dist = d;
       }
     }, { passive: false });
 
+    function applyModelScale() {
+      if (!model) return;
+      model.scale.setScalar(modelBaseScale * modelScale);
+      // Scale shadow and AO ring together with the model
+      shadowDisc.scale.setScalar(modelScale);
+      aoRing.scale.setScalar(modelScale);
+    }
+
     function resetPlacement() {
       modelPlaced = false;
+      placementAnimating = false;
       modelGroup.visible = false;
+      modelGroup.scale.setScalar(1);
       reticleMesh.visible = true;
       dom.hint.innerText = 'Point camera at surface · Tap to place';
       modelScale = 1;
-      if (model) model.scale.setScalar(modelBaseScale);
-      shadowDisc.scale.setScalar(1);
+      applyModelScale();
     }
 
     dom.resetBtn.addEventListener('click', resetPlacement);
     dom.biggerBtn.addEventListener('click', () => {
-      if (!model) return;
       modelScale = Math.min(modelScale * 1.25, 4);
-      model.scale.setScalar(modelBaseScale * modelScale);
-      shadowDisc.scale.setScalar(modelScale);
+      applyModelScale();
     });
     dom.smallerBtn.addEventListener('click', () => {
-      if (!model) return;
       modelScale = Math.max(modelScale * 0.8, 0.3);
-      model.scale.setScalar(modelBaseScale * modelScale);
-      shadowDisc.scale.setScalar(modelScale);
+      applyModelScale();
     });
 
     // ── Startup routing ──
